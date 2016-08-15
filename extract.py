@@ -6,7 +6,7 @@ import urllib2
 import urlparse
 
 
-FOLDERS_TO_CREATE = ['css', 'fonts', 'images', 'js', 'other']
+FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
 HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/52.0.2743.116 Safari/537.36"
@@ -95,6 +95,10 @@ def save_resource(url, save_folder, base_url, full_url):
     folder = select_folder(ext)
     save_path = "%s/%s/%s" % (save_folder, folder, file_name)
 
+    # do not download videos unless flag has been set
+    if folder == 'videos' and not args.videos:
+        return "NOT_DOWNLOADED/" + url
+
     # create full URL to download, regardless if URL has an absolute, relative or full path
     download_path = get_download_path(url, base_url, full_url)
 
@@ -112,7 +116,7 @@ def save_resource(url, save_folder, base_url, full_url):
 
 
 # search CSS stylesheet (string) for web resources and download them
-def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url):
+def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, relpath):
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
         # use regexp to search for url(...)
@@ -127,11 +131,15 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url):
                     sanitized_url = url.group(1)
 
                 # check if URL does not contain binary data, if not save resource
-                if not sanitized_url.startswith('data:'):
+                if sanitized_url and not sanitized_url.startswith('data:'):
                     # save resource
                     save_path = save_resource(sanitized_url, save_folder, base_url, full_url)
+                    # modify path, as the web resources are requested from the /css folder
+                    # only do this for external stylesheets, not for internal or inline styles
+                    if relpath:
+                        save_path = save_path(save_folder, '..', 1)
                     # replace url with new path
-                    stylesheet_string = stylesheet_string.replace(sanitized_url, save_path, url.start())
+                    stylesheet_string = stylesheet_string[url.start()+4] + save_path + stylesheet_string[url.end()-1]
 
     return stylesheet_string
 
@@ -146,7 +154,8 @@ def select_folder(ext):
         'jpeg': 'images',
         'jpg': 'images',
         'png': 'images',
-        'ico': '',
+        # icons
+        'ico': 'icons',
         # fonts
         'eot': 'fonts',
         'svg': 'fonts',
@@ -154,13 +163,35 @@ def select_folder(ext):
         'woff': 'fonts',
         'woff2': 'fonts',
         'other': 'other',
+        # videos
+        'mp4': 'videos',
+        'ogv': 'videos',
+        'webm': 'videos',
+        'mov': 'videos'
     }.get(ext, 'other')
+
+
+def get_file_name_for_url(url):
+    # write HTML to file
+    file_name = url.split('/')[-1]
+    # add .html to filename if it does not have it already
+    if not file_name.endswith('.htm') and not file_name.endswith('.html'):
+        file_name += '.html'
+
+    return file_name
 
 
 def main(url, output_folder, folders_to_create):
     try:
-        # parse HTML from URL
-        root = html.fromstring(get_url(url))
+        # if page has already been downloaded before, use local copy
+        file_name = get_file_name_for_url(url)
+        if not os.path.isfile(file_name):
+            # parse HTML from URL
+            root = html.fromstring(get_url(url))
+        else:
+            # parse HTML from local file
+            root = html.parse(file_name)
+
         if root is not None:
             # prepare folders
             create_folders(output_folder, folders_to_create)
@@ -172,49 +203,52 @@ def main(url, output_folder, folders_to_create):
             # dict containing relative paths to CSS files, for retrieving web resources within these files later on
             stylesheets_path = {}
 
+            # find all web resources in link tags that are not a stylesheet
+            for elm in root.xpath("//link[@rel!='stylesheet' and @type!='text/css' and @href]"):
+                if elm.get('href'):
+                    # save resource
+                    save_path = save_resource(elm.get('href'), output_folder, base_url, full_url)
+                    # set new path to web resource
+                    elm.set('href', save_path)
+
             # find all external stylesheets
             # xpath expression returns directly the value of href
-            for src in root.xpath('//link/@href'):
-                # save resource
-                save_path = save_resource(src, output_folder, base_url, full_url)
-
-                # store relative path to CSS files, for retrieving web resources within these files later on
-                if '//' in src:
-                    download_path = src
-                else:
-                    download_path = get_download_path(src, base_url, full_url)
-
-                # store relative path in dict with as key the filename of the stylesheet
-                stylesheet_file_name = urlparse.urlsplit(url).path.split('/')[-1]
-                stylesheets_path[stylesheet_file_name] = download_path
-
-                # set src to new path
-                elm = src.getparent()
-                elm.set('href', save_path)
+            for elm in root.xpath("//link[@rel='stylesheet' and @type='text/css' and @href]"):
+                if elm.get('href'):
+                    href = elm.get('href')
+                    # save resource
+                    save_path = save_resource(href, output_folder, base_url, full_url)
+                    # store relative path to CSS files, for retrieving web resources within these files later on
+                    if '//' in href:
+                        download_path = href
+                    else:
+                        download_path = get_download_path(href, base_url, full_url)
+                    # store relative path in dict with as key the filename of the stylesheet
+                    stylesheet_file_name = urlparse.urlsplit(href).path.split('/')[-1]
+                    stylesheets_path[stylesheet_file_name] = download_path
+                    # set new path to web resource
+                    elm.set('href', save_path)
 
             # find all web resources from elements with src attribute (<script> and <img> elements)
             # xpath expression returns directly the value of src
-            for src in root.xpath('//*/@src'):
-                # save resource
-                save_path = save_resource(src, output_folder, base_url, full_url)
-
-                # set src to new path
-                elm = src.getparent()
-                elm.set('src', save_path)
+            for elm in root.xpath('//*[@src]'):
+                if elm.get('src'):
+                    # save resource
+                    save_path = save_resource(elm.get('src'), output_folder, base_url, full_url)
+                    # set new path to web resource
+                    elm.set('src', save_path)
 
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
-                new_css = save_resources_from_css(elm.text, output_folder, base_url, full_url)
+                new_css = save_resources_from_css(elm.text, output_folder, base_url, full_url, False)
                 # set new text for element, with updated URLs
                 elm.text = new_css
 
             # find web resources in inline styles
             # xpath expression returns directly the value of style
-            for style in root.xpath('//*/@style'):
-                new_css = save_resources_from_css(style, output_folder, base_url, full_url)
-
+            for elm in root.xpath('//*[@style]'):
+                new_css = save_resources_from_css(elm.get('style'), output_folder, base_url, full_url, False)
                 # set style with new path
-                elm = style.getparent()
                 elm.set('style', new_css)
 
             # find web resources in external stylesheets
@@ -229,17 +263,14 @@ def main(url, output_folder, folders_to_create):
                         with open(css_file_name, 'r') as f:
                             file_contents = f.read()
                             new_css = save_resources_from_css(file_contents, output_folder, stylesheet_base_url,
-                                                              stylesheet_full_url)
+                                                              stylesheet_full_url, True)
                         with open(css_file_name, 'w') as f:
                             f.write(new_css)
 
-            # write HTML to file
-            file_name = url.split('/')[-1]
-            # add .html to filename if it does not have it already
-            if not file_name.endswith('.htm') and not file_name.endswith('.html'):
-                file_name += '.html'
-            with open(file_name, 'w') as f:
-                f.write(html.tostring(root))
+            # save page if not been downloaded before
+            if not os.path.isfile(file_name):
+                with open(file_name, 'w') as f:
+                    f.write(html.tostring(root))
 
     except IOError as e:
         print "Could not fetch HTML for URL: %s" % e
@@ -248,8 +279,9 @@ def main(url, output_folder, folders_to_create):
 if __name__ == '__main__':
     description = "Downloads HTML for URL and downloads all web resources and rewrites links"
     parser = ArgumentParser(description=description)
-    parser.add_argument("url", help="URL to extract web resources for", metavar="URL")
-    parser.add_argument("output", help="download resources to folder", metavar="FOLDERNAME")
+    parser.add_argument('url', help="URL to extract web resources for", metavar='URL')
+    parser.add_argument('output', help="download resources to folder", metavar='FOLDERNAME')
+    parser.add_argument('-v', '--videos', action='store_true', help='download videos')
 
     args = parser.parse_args()
     main(args.url, args.output, FOLDERS_TO_CREATE)
