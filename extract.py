@@ -137,9 +137,9 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, 
                     # modify path, as the web resources are requested from the /css folder
                     # only do this for external stylesheets, not for internal or inline styles
                     if relpath:
-                        save_path = save_path(save_folder, '..', 1)
+                        save_path = save_path.replace(save_folder, '..', 1)
                     # replace url with new path
-                    stylesheet_string = stylesheet_string[url.start()+4] + save_path + stylesheet_string[url.end()-1]
+                    stylesheet_string = stylesheet_string[:url.start()+4] + save_path + stylesheet_string[:url.end()-1]
 
     return stylesheet_string
 
