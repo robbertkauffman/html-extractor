@@ -13,6 +13,7 @@ HEADER = {
 }
 
 
+# create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
 def create_folders(save_folder, folder_list):
     for folder in folder_list:
         folder_path = "%s/%s" % (save_folder, folder)
@@ -20,6 +21,37 @@ def create_folders(save_folder, folder_list):
             os.makedirs(folder_path)
 
 
+# get URLs for downloading web resources
+# base URL for retrieving resources with absolute path (URL starts with '/')
+def get_base_url(url):
+    if not urlparse.urlparse(url).path:
+        base_url = url
+    else:
+        base_url = "/".join(url.split('/')[:3])
+
+    # remove trailing / for base URL for downloading web resources
+    if base_url.endswith('/'):
+        base_url = base_url[:-1]
+
+    return base_url
+
+
+# get URLs for downloading web resources
+# full URL for retrieving resources with relative path
+def get_full_url(url):
+    if not urlparse.urlparse(url).path:
+        full_url = url
+    else:
+        full_url = "/".join(url.split('/')[:-1])
+
+    # append / to full URL for downloading web resources
+    if not full_url.endswith('/'):
+        full_url += '/'
+
+    return full_url
+
+
+# download resource for URL, raise error if 404 or other error is returned
 def get_url(url):
     try:
         request = urllib2.Request(url, headers=HEADER)
@@ -35,36 +67,51 @@ def get_url(url):
             print "Error %s for URL: %s" % (e.reason, url)
 
 
-def save_resource(url, save_folder, base_url, full_url):
-    # get filename and extension of resource
-    file_name = urlparse.urlsplit(url).path.split('/')[-1]
-    ext = file_name.split('.')[-1].lower()
-
-    # determine which folder resource should be saved to (image, font, etc.)
-    folder = select_folder(ext)
-    save_path = "%s/%s/%s" % (save_folder, folder, file_name)
-
-
+# returns full URL, regardless of URL having an absolute, relative or full path
+def get_download_path(url, base_url, full_url):
     # add scheme, if URL does not contain scheme
     if url.startswith('//'):
         download_path = urlparse.urlparse(base_url).scheme + ':' + url
     # base or full URL only needs to be appended if it is an external resource
     elif '//' in url:
         download_path = url
+    # for absolute paths use the base URL
     elif url.startswith('/'):
         download_path = base_url + url
+    # for relative paths use the full URL
     else:
         download_path = full_url + url
 
-    response = get_url(download_path)
-    if response:
-        print "Saving external resource with URL '%s' to '%s" % (download_path, save_path)
-        with open(save_path, 'w') as f:
-            f.write(response)
+    return download_path
+
+
+# download web resource, determine full URL and save location
+def save_resource(url, save_folder, base_url, full_url):
+    # get filename and extension of resource
+    file_name = urlparse.urlsplit(url).path.split('/')[-1]
+    ext = file_name.split('.')[-1].lower()
+
+    # determine which folder the resource should be saved to (image, font, etc.)
+    folder = select_folder(ext)
+    save_path = "%s/%s/%s" % (save_folder, folder, file_name)
+
+    # create full URL to download, regardless if URL has an absolute, relative or full path
+    download_path = get_download_path(url, base_url, full_url)
+
+    # only download if file is not already existing (has been downloaded before)
+    if not os.path.isfile(save_path):
+        response = get_url(download_path)
+        if response:
+            print "Saving external resource with URL '%s' to '%s" % (download_path, save_path)
+            with open(save_path, 'w') as f:
+                f.write(response)
+    else:
+        print "File already exists: %s" % save_path
 
     return save_path
 
 
+# search CSS stylesheet (string) for web resources and download them
 def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url):
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
@@ -89,6 +136,7 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url):
     return stylesheet_string
 
 
+# switch-case statement used by create_folders()
 def select_folder(ext):
     return {
         'css': 'css',
@@ -118,26 +166,27 @@ def main(url, output_folder, folders_to_create):
             create_folders(output_folder, folders_to_create)
 
             # get URLs for downloading web resources
-            # base URL for retrieving resources with absolute path (URL starts with '/')
-            # full URL for retrieving resources with relative path
-            base_url = url
-            if not urlparse.urlparse(url).path:
-                full_url = base_url
-            else:
-                base_url = "/".join(url.split('/')[:3])
-                full_url = "/".join(url.split('/')[:-1])
+            base_url = get_base_url(url)
+            full_url = get_full_url(url)
 
-            # append / to full URL and remove trailing / for base URL, for downloading web resources
-            if base_url.endswith('/'):
-                base_url = base_url[:-1]
-            if not full_url.endswith('/'):
-                full_url += '/'
+            # dict containing relative paths to CSS files, for retrieving web resources within these files later on
+            stylesheets_path = {}
 
             # find all external stylesheets
             # xpath expression returns directly the value of href
             for src in root.xpath('//link/@href'):
                 # save resource
                 save_path = save_resource(src, output_folder, base_url, full_url)
+
+                # store relative path to CSS files, for retrieving web resources within these files later on
+                if '//' in src:
+                    download_path = src
+                else:
+                    download_path = get_download_path(src, base_url, full_url)
+
+                # store relative path in dict with as key the filename of the stylesheet
+                stylesheet_file_name = urlparse.urlsplit(url).path.split('/')[-1]
+                stylesheets_path[stylesheet_file_name] = download_path
 
                 # set src to new path
                 elm = src.getparent()
@@ -169,15 +218,20 @@ def main(url, output_folder, folders_to_create):
                 elm.set('style', new_css)
 
             # find web resources in external stylesheets
-            # TODO: add relative path of css file for retrieving web resources
             for css_file in os.listdir(output_folder + '/css'):
                 css_file_name = output_folder + '/css/' + css_file
                 if os.path.isfile(css_file_name):
-                    with open(css_file_name, 'r') as f:
-                        file_contents = f.read()
-                        new_css = save_resources_from_css(file_contents, output_folder, base_url, full_url)
-                    with open(css_file_name, 'w') as f:
-                        f.write(new_css)
+                    # get relative path to CSS file for downloading web resources
+                    if css_file in stylesheets_path:
+                        css_file_path = stylesheets_path[css_file]
+                        stylesheet_base_url = get_base_url(css_file_path)
+                        stylesheet_full_url = get_full_url(css_file_path)
+                        with open(css_file_name, 'r') as f:
+                            file_contents = f.read()
+                            new_css = save_resources_from_css(file_contents, output_folder, stylesheet_base_url,
+                                                              stylesheet_full_url)
+                        with open(css_file_name, 'w') as f:
+                            f.write(new_css)
 
             # write HTML to file
             file_name = url.split('/')[-1]
