@@ -286,10 +286,9 @@ def main(url, output_folder, folders_to_create):
                         with open(css_file_name, 'w') as f:
                             f.write(new_css)
 
-            # save page if not been downloaded before
-            if not os.path.isfile(file_name):
-                with open(file_name, 'w') as f:
-                    f.write(html.tostring(root))
+            # save page
+            with open(file_name, 'w') as f:
+                f.write(html.tostring(root))
 
     except IOError as e:
         print "Could not fetch HTML for URL: %s" % e
