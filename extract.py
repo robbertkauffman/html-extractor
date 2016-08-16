@@ -120,26 +120,36 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, 
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
         # use regexp to search for url(...)
-        iter_url = re.finditer(r'url\(([^)]*)\)', stylesheet_string)
-        # iterate over result
-        for url in iter_url:
-            if url.groups():
-                # remove leading and trailing ' and "
-                if url.group(1).startswith('\'') or url.group(1).startswith('"'):
-                    sanitized_url = url.group(1)[1:-1]
-                else:
-                    sanitized_url = url.group(1)
+        pattern = re.compile(r'url\(([^)]*)\)')
+        pos = 0
+        url = pattern.search(stylesheet_string, pos)
 
-                # check if URL does not contain binary data, if not save resource
-                if sanitized_url and not sanitized_url.startswith('data:'):
-                    # save resource
-                    save_path = save_resource(sanitized_url, save_folder, base_url, full_url)
-                    # modify path, as the web resources are requested from the /css folder
-                    # only do this for external stylesheets, not for internal or inline styles
-                    if relpath:
-                        save_path = save_path.replace(save_folder, '..', 1)
-                    # replace url with new path
-                    stylesheet_string = stylesheet_string[:url.start()+4] + save_path + stylesheet_string[:url.end()-1]
+        while url:
+            # remove leading and trailing ' and "
+            if url.group(1).startswith('\'') or url.group(1).startswith('"'):
+                sanitized_url = url.group(1)[1:-1]
+            else:
+                sanitized_url = url.group(1)
+
+            # check if URL is not null and does not contain binary data
+            if sanitized_url and not sanitized_url.startswith('data:'):
+                # save resource
+                save_path = save_resource(sanitized_url, save_folder, base_url, full_url)
+                # modify path, as the web resources are requested from the /css folder
+                # only do this for external stylesheets, not for internal or inline styles
+                if relpath:
+                    save_path = save_path.replace(save_folder, '..', 1)
+                # replace url with new path
+                stylesheet_string = stylesheet_string[:url.start(1)] + save_path + \
+                                    stylesheet_string[url.end(1):]
+                # update position for next search
+                pos = url.start(1) + len(save_path) + 1
+            else:
+                # update position for next search
+                pos = url.end(0)
+
+            # do new search
+            url = pattern.search(stylesheet_string, pos)
 
     return stylesheet_string
 
