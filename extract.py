@@ -248,6 +248,15 @@ def main(url, output_folder, folders_to_create):
                     # set new path to web resource
                     elm.set('src', save_path)
 
+            # find all web resources from elements with data-src attribute (HTML5)
+            # xpath expression returns directly the value of data-src
+            for elm in root.xpath('//*[@data-src]'):
+                if elm.get('data-src'):
+                    # save resource
+                    save_path = save_resource(elm.get('data-src'), output_folder, base_url, full_url)
+                    # set new path to web resource
+                    elm.set('data-src', save_path)
+
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
                 new_css = save_resources_from_css(elm.text, output_folder, base_url, full_url, False)
