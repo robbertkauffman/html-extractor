@@ -12,7 +12,7 @@ HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/52.0.2743.116 Safari/537.36"
 }
-
+TEMPLATE_FILE_NAME = "base-layout.ftl"
 
 # initiate logger
 logger = logging.getLogger(__name__)
@@ -188,19 +188,23 @@ def select_folder(ext):
 
 
 def get_file_name_for_url(url):
-    # remove any trailing slashes
-    file_name = url.rstrip('/').split('/')[-1]
+    # remove scheme from URL
+    file_name = url.replace("http://", "", 1).replace("https://", "", 1)
+    # remove any trailing slashes, replace slashes by minus
+    file_name = file_name.rstrip('/').replace('/', '-')
+    # remove any non alphanumeric characters, as these can be a problem in filenames
+    file_name = re.sub(r'[^A-Za-z0-9-_.]', '', file_name)
     # add .html to filename if it does not have it already
     if not file_name.endswith('.htm') and not file_name.endswith('.html'):
-        file_name += '.html'
-
+        file_name += '.flt'
     return file_name
 
 
 def main(url, output_folder, folders_to_create):
     try:
         # if page has already been downloaded before, use local copy
-        file_name = get_file_name_for_url(url)
+        # save_html_file_path = output_folder + get_file_name_for_url(url)
+        file_name = output_folder + "/" + TEMPLATE_FILE_NAME
         if not os.path.isfile(file_name):
             # parse HTML from URL
             root = html.fromstring(get_url(url))
