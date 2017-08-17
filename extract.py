@@ -1,5 +1,6 @@
 from lxml import html
 from argparse import ArgumentParser
+import logging
 import os
 import re
 import urllib2
@@ -11,6 +12,10 @@ HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/52.0.2743.116 Safari/537.36"
 }
+
+
+# initiate logger
+logger = logging.getLogger(__name__)
 
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
@@ -60,11 +65,11 @@ def get_url(url):
         return response.read()
     except urllib2.HTTPError, e:
         if e.code == 404:
-            print "Error 404, resource not found: %s" % url
+            logger.error("Error 404, resource not found: %s", url)
         else:
-            print "Error with status code %s for URL: %s" % (e.code, url)
+            logger.error("Error with status code %s for URL: %s", e.code, url)
     except urllib2.URLError, e:
-            print "Error %s for URL: %s" % (e.reason, url)
+            logger.error("Error %s for URL: %s", e.reason, url)
 
 
 # returns full URL, regardless of URL having an absolute, relative or full path
@@ -106,13 +111,13 @@ def save_resource(url, save_folder, base_url, full_url):
     if not os.path.isfile(save_path):
         response = get_url(download_path)
         if response:
-            print "Saving external resource with URL '%s' to '%s" % (download_path, save_path)
+            logger.info("Saving external resource with URL '%s' to '%s", download_path, save_path)
             with open(save_path, 'w') as f:
                 f.write(response)
         else:
             return url
     else:
-        print "File already exists: %s" % save_path
+        logger.warn("File already exists: %s", save_path)
 
     return save_path
 
@@ -142,8 +147,7 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, 
                 if relpath:
                     save_path = save_path.replace(save_folder, '..', 1)
                 # replace url with new path
-                stylesheet_string = stylesheet_string[:url.start(1)] + save_path + \
-                                    stylesheet_string[url.end(1):]
+                stylesheet_string = stylesheet_string[:url.start(1)] + save_path + stylesheet_string[url.end(1):]
                 # update position for next search
                 pos = url.start(1) + len(save_path) + 1
             else:
@@ -291,7 +295,7 @@ def main(url, output_folder, folders_to_create):
                 f.write(html.tostring(root))
 
     except IOError as e:
-        print "Could not fetch HTML for URL: %s" % e
+        logger.error("Could not fetch HTML for URL: %s", e)
 
 
 if __name__ == '__main__':
