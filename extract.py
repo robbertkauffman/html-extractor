@@ -30,36 +30,6 @@ def create_folders(save_folder, folder_list):
             os.makedirs(folder_path)
 
 
-# get URLs for downloading web resources
-# base URL for retrieving resources with absolute path (URL starts with '/')
-def get_base_url(url):
-    if not urlparse.urlparse(url).path:
-        base_url = url
-    else:
-        base_url = "/".join(url.split('/')[:3])
-
-    # remove trailing / for base URL for downloading web resources
-    if base_url.endswith('/'):
-        base_url = base_url[:-1]
-
-    return base_url
-
-
-# get URLs for downloading web resources
-# full URL for retrieving resources with relative path
-def get_full_url(url):
-    if not urlparse.urlparse(url).path:
-        full_url = url
-    else:
-        full_url = "/".join(url.split('/')[:-1])
-
-    # append / to full URL for downloading web resources
-    if not full_url.endswith('/'):
-        full_url += '/'
-
-    return full_url
-
-
 # download resource for URL, raise error if 404 or other error is returned
 def download_resource(origin_url, url):
     # get fully qualified URL, regardless if URL is a full URL, relative or absolute
@@ -136,10 +106,6 @@ def save_resources_from_css(origin_url, stylesheet_string, save_folder):
             if sanitized_url and not sanitized_url.startswith('data:'):
                 # save resource
                 save_path = save_resource(origin_url, sanitized_url, save_folder)
-                # modify path, as the web resources are requested from the /css folder
-                # only do this for external stylesheets, not for internal or inline styles
-                # if relpath:
-                #     save_path = save_path.replace(save_folder, '..', 1)
                 # replace url with new path
                 stylesheet_string = stylesheet_string[:url.start(1)] + save_path + stylesheet_string[url.end(1):]
                 # update position for next search
