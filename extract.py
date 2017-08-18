@@ -13,10 +13,12 @@ HEADER = {
                   "Chrome/52.0.2743.116 Safari/537.36"
 }
 TEMPLATE_FILE_NAME = "base-layout.ftl"
+WEBFILES_START_TAG = "<@hst.webfile  path=\""
+WEBFILES_END_TAG = "\"/>"
 
 # initiate logger
+logging.basicConfig()
 logger = logging.getLogger(__name__)
-
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
 def create_folders(save_folder, folder_list):
@@ -57,7 +59,11 @@ def get_full_url(url):
 
 
 # download resource for URL, raise error if 404 or other error is returned
-def get_url(url):
+def download_resource(origin_url, url):
+    # get fully qualified URL, regardless if URL is a full URL, relative or absolute
+    url = urlparse.urljoin(origin_url, url)
+
+    # download resource
     try:
         request = urllib2.Request(url, headers=HEADER)
         response = urllib2.urlopen(request)
@@ -91,39 +97,43 @@ def get_download_path(url, base_url, full_url):
 
 
 # download web resource, determine full URL and save location
-def save_resource(url, save_folder, base_url, full_url):
+def save_resource(origin_url, url, save_folder):
     # get filename and extension of resource
     file_name = urlparse.urlsplit(url).path.replace('/', '-').lstrip('-')
     ext = file_name.split('.')[-1].lower()
 
     # determine which folder the resource should be saved to (image, font, etc.)
     folder = select_folder(ext)
-    save_path = "%s/%s/%s" % (save_folder, folder, file_name)
+    save_path = "%s/%s" % (folder, file_name)
 
     # do not download videos unless flag has been set
     if folder == 'videos' and not args.videos:
-        return "NOT_DOWNLOADED/" + url
+        return url
 
     # create full URL to download, regardless if URL has an absolute, relative or full path
-    download_path = get_download_path(url, base_url, full_url)
+    # download_path = get_download_path(url, base_url, full_url)
 
     # only download if file is not already existing (has been downloaded before)
     if not os.path.isfile(save_path):
-        response = get_url(download_path)
+        response = download_resource(origin_url, url)
         if response:
-            logger.info("Saving external resource with URL '%s' to '%s", download_path, save_path)
-            with open(save_path, 'w') as f:
+            logger.info("Saving external resource with URL '%s' to '%s", url, save_path)
+            with open(save_folder + '/' + save_path, 'w') as f:
                 f.write(response)
         else:
             return url
     else:
         logger.warn("File already exists: %s", save_path)
 
+    # encapsulate the path to the web resource in the webfile tag,
+    # so the link works directly in Hippo
+    # save_path = WEBFILES_START_TAG + save_path + WEBFILES_END_TAG
+
     return save_path
 
 
 # search CSS stylesheet (string) for web resources and download them
-def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, relpath):
+def save_resources_from_css(origin_url, stylesheet_string, save_folder):
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
         # use regexp to search for url(...)
@@ -141,11 +151,11 @@ def save_resources_from_css(stylesheet_string, save_folder, base_url, full_url, 
             # check if URL is not null and does not contain binary data
             if sanitized_url and not sanitized_url.startswith('data:'):
                 # save resource
-                save_path = save_resource(sanitized_url, save_folder, base_url, full_url)
+                save_path = save_resource(origin_url, sanitized_url, save_folder)
                 # modify path, as the web resources are requested from the /css folder
                 # only do this for external stylesheets, not for internal or inline styles
-                if relpath:
-                    save_path = save_path.replace(save_folder, '..', 1)
+                # if relpath:
+                #     save_path = save_path.replace(save_folder, '..', 1)
                 # replace url with new path
                 stylesheet_string = stylesheet_string[:url.start(1)] + save_path + stylesheet_string[url.end(1):]
                 # update position for next search
@@ -196,7 +206,8 @@ def get_file_name_for_url(url):
     file_name = re.sub(r'[^A-Za-z0-9-_.]', '', file_name)
     # add .html to filename if it does not have it already
     if not file_name.endswith('.htm') and not file_name.endswith('.html'):
-        file_name += '.flt'
+        # file_name += '.flt'
+        file_name += '.html'
     return file_name
 
 
@@ -207,7 +218,7 @@ def main(url, output_folder, folders_to_create):
         file_name = output_folder + "/" + TEMPLATE_FILE_NAME
         if not os.path.isfile(file_name):
             # parse HTML from URL
-            root = html.fromstring(get_url(url))
+            root = html.fromstring(download_resource(url, ""))
         else:
             # parse HTML from local file
             root = html.parse(file_name)
@@ -217,8 +228,8 @@ def main(url, output_folder, folders_to_create):
             create_folders(output_folder, folders_to_create)
 
             # get URLs for downloading web resources
-            base_url = get_base_url(url)
-            full_url = get_full_url(url)
+            # base_url = get_base_url(url)
+            # full_url = get_full_url(url)
 
             # list containing relative paths to CSS files, for retrieving web resources within these files later on
             css_files = []
@@ -227,7 +238,7 @@ def main(url, output_folder, folders_to_create):
             for elm in root.xpath("//link[@rel!='stylesheet' and @type!='text/css' and @href]"):
                 if elm.get('href'):
                     # save resource
-                    save_path = save_resource(elm.get('href'), output_folder, base_url, full_url)
+                    save_path = save_resource(url, elm.get('href'), output_folder)
                     # set new path to web resource
                     elm.set('href', save_path)
 
@@ -237,15 +248,16 @@ def main(url, output_folder, folders_to_create):
                 if elm.get('href'):
                     href = elm.get('href')
                     # save resource
-                    save_path = save_resource(href, output_folder, base_url, full_url)
+                    save_path = save_resource(url, href, output_folder)
                     # store relative path to CSS files, for retrieving web resources within these files later on
-                    if '//' in href:
-                        download_path = href
-                    else:
-                        download_path = get_download_path(href, base_url, full_url)
+                    # if '//' in href:
+                    #     download_path = href
+                    # else:
+                    #     download_path = get_download_path(href, base_url, full_url)
                     # store relative path and file path of saved file as tuple in list
                     # which will be iterated over later
-                    css_files.append((save_path, download_path))
+                    # css_files.append((save_path, download_path))
+                    css_files.append((save_path, href))
                     # set new path to web resource
                     elm.set('href', save_path)
 
@@ -254,7 +266,7 @@ def main(url, output_folder, folders_to_create):
             for elm in root.xpath('//*[@src]'):
                 if elm.get('src'):
                     # save resource
-                    save_path = save_resource(elm.get('src'), output_folder, base_url, full_url)
+                    save_path = save_resource(url, elm.get('src'), output_folder)
                     # set new path to web resource
                     elm.set('src', save_path)
 
@@ -263,34 +275,33 @@ def main(url, output_folder, folders_to_create):
             for elm in root.xpath('//*[@data-src]'):
                 if elm.get('data-src'):
                     # save resource
-                    save_path = save_resource(elm.get('data-src'), output_folder, base_url, full_url)
+                    save_path = save_resource(url, elm.get('data-src'), output_folder)
                     # set new path to web resource
                     elm.set('data-src', save_path)
 
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
-                new_css = save_resources_from_css(elm.text, output_folder, base_url, full_url, False)
+                new_css = save_resources_from_css(url, elm.text, output_folder)
                 # set new text for element, with updated URLs
                 elm.text = new_css
 
             # find web resources in inline styles
             # xpath expression returns directly the value of style
             for elm in root.xpath('//*[@style]'):
-                new_css = save_resources_from_css(elm.get('style'), output_folder, base_url, full_url, False)
+                new_css = save_resources_from_css(url, elm.get('style'), output_folder)
                 # set style with new path
                 elm.set('style', new_css)
 
             # find web resources in external stylesheets
             for css_file in css_files:
-                (css_file_path, css_rel_path) = css_file
+                (css_file_path, css_url) = css_file
                 if os.path.isfile(css_file_path):
                     # get relative path to CSS file for downloading web resources
-                    css_base_url = get_base_url(css_rel_path)
-                    css_full_url = get_full_url(css_rel_path)
+                    # css_base_url = get_base_url(css_rel_path)
+                    # css_full_url = get_full_url(css_rel_path)
                     with open(css_file_path, 'r') as f:
                         file_contents = f.read()
-                        new_css = save_resources_from_css(file_contents, output_folder, css_base_url, css_full_url,
-                                                          True)
+                        new_css = save_resources_from_css(url, file_contents, output_folder)
                     with open(css_file_path, 'w') as f:
                         f.write(new_css)
 
