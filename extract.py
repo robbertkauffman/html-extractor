@@ -9,16 +9,17 @@ import urlparse
 
 FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
 HEADER = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/52.0.2743.116 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/60.0.3112.90 Safari/537.36"
 }
-TEMPLATE_FILE_NAME = "base-layout.ftl"
+TEMPLATE_FILE_NAME = "base-layout.html"
 WEBFILES_START_TAG = "<@hst.webfile  path=\""
 WEBFILES_END_TAG = "\"/>"
 
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
+
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
 def create_folders(save_folder, folder_list):
@@ -78,24 +79,6 @@ def download_resource(origin_url, url):
             logger.error("Error %s for URL: %s", e.reason, url)
 
 
-# returns full URL, regardless of URL having an absolute, relative or full path
-def get_download_path(url, base_url, full_url):
-    # add scheme, if URL does not contain scheme
-    if url.startswith('//'):
-        download_path = urlparse.urlparse(base_url).scheme + ':' + url
-    # base or full URL only needs to be appended if it is an external resource
-    elif '//' in url:
-        download_path = url
-    # for absolute paths use the base URL
-    elif url.startswith('/'):
-        download_path = base_url + url
-    # for relative paths use the full URL
-    else:
-        download_path = full_url + url
-
-    return download_path
-
-
 # download web resource, determine full URL and save location
 def save_resource(origin_url, url, save_folder):
     # get filename and extension of resource
@@ -109,9 +92,6 @@ def save_resource(origin_url, url, save_folder):
     # do not download videos unless flag has been set
     if folder == 'videos' and not args.videos:
         return url
-
-    # create full URL to download, regardless if URL has an absolute, relative or full path
-    # download_path = get_download_path(url, base_url, full_url)
 
     # only download if file is not already existing (has been downloaded before)
     if not os.path.isfile(save_path):
@@ -197,24 +177,9 @@ def select_folder(ext):
     }.get(ext, 'other')
 
 
-def get_file_name_for_url(url):
-    # remove scheme from URL
-    file_name = url.replace("http://", "", 1).replace("https://", "", 1)
-    # remove any trailing slashes, replace slashes by minus
-    file_name = file_name.rstrip('/').replace('/', '-')
-    # remove any non alphanumeric characters, as these can be a problem in filenames
-    file_name = re.sub(r'[^A-Za-z0-9-_.]', '', file_name)
-    # add .html to filename if it does not have it already
-    if not file_name.endswith('.htm') and not file_name.endswith('.html'):
-        # file_name += '.flt'
-        file_name += '.html'
-    return file_name
-
-
 def main(url, output_folder, folders_to_create):
     try:
         # if page has already been downloaded before, use local copy
-        # save_html_file_path = output_folder + get_file_name_for_url(url)
         file_name = output_folder + "/" + TEMPLATE_FILE_NAME
         if not os.path.isfile(file_name):
             # parse HTML from URL
@@ -226,10 +191,6 @@ def main(url, output_folder, folders_to_create):
         if root is not None:
             # prepare folders
             create_folders(output_folder, folders_to_create)
-
-            # get URLs for downloading web resources
-            # base_url = get_base_url(url)
-            # full_url = get_full_url(url)
 
             # list containing relative paths to CSS files, for retrieving web resources within these files later on
             css_files = []
@@ -296,9 +257,6 @@ def main(url, output_folder, folders_to_create):
             for css_file in css_files:
                 (css_file_path, css_url) = css_file
                 if os.path.isfile(css_file_path):
-                    # get relative path to CSS file for downloading web resources
-                    # css_base_url = get_base_url(css_rel_path)
-                    # css_full_url = get_full_url(css_rel_path)
                     with open(css_file_path, 'r') as f:
                         file_contents = f.read()
                         new_css = save_resources_from_css(url, file_contents, output_folder)
