@@ -87,7 +87,7 @@ def save_resource(origin_url, url, save_folder):
 
 
 # search CSS stylesheet (string) for web resources and download them
-def save_resources_from_css(origin_url, stylesheet_string, save_folder):
+def save_resources_from_css(origin_url, stylesheet_string, save_folder, rel_path):
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
         # use regexp to search for url(...)
@@ -106,6 +106,10 @@ def save_resources_from_css(origin_url, stylesheet_string, save_folder):
             if sanitized_url and not sanitized_url.startswith('data:'):
                 # save resource
                 save_path = save_resource(origin_url, sanitized_url, save_folder)
+                # modify path, as the web resources are requested from the /css folder
+                # only do this for external stylesheets, not for internal or inline styles
+                if rel_path:
+                    save_path = "../%s" % save_path
                 # replace url with new path
                 stylesheet_string = stylesheet_string[:url.start(1)] + save_path + stylesheet_string[url.end(1):]
                 # update position for next search
@@ -200,14 +204,14 @@ def main(url, output_folder):
 
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
-                new_css = save_resources_from_css(url, elm.text, output_folder)
+                new_css = save_resources_from_css(url, elm.text, output_folder, False)
                 # set new text for element, with updated URLs
                 elm.text = new_css
 
             # find web resources in inline styles
             # xpath expression returns directly the value of style
             for elm in root.xpath('//*[@style]'):
-                new_css = save_resources_from_css(url, elm.get('style'), output_folder)
+                new_css = save_resources_from_css(url, elm.get('style'), output_folder, False)
                 # set style with new path
                 elm.set('style', new_css)
 
@@ -219,7 +223,7 @@ def main(url, output_folder):
                 if os.path.isfile(css_file_path):
                     with open(css_file_path, 'r') as f:
                         css_file_contents = f.read()
-                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, output_folder)
+                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, output_folder, True)
                     with open(css_file_path, 'w') as f:
                         f.write(new_css_file_content)
 
