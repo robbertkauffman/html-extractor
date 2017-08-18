@@ -19,6 +19,7 @@ WEBFILES_END_TAG = "\"/>"
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
@@ -87,18 +88,21 @@ def save_resource(origin_url, url, save_folder):
 
     # determine which folder the resource should be saved to (image, font, etc.)
     folder = select_folder(ext)
-    save_path = "%s/%s" % (folder, file_name)
+    resource_path = "%s/%s" % (folder, file_name)
 
     # do not download videos unless flag has been set
     if folder == 'videos' and not args.videos:
         return url
+
+    # add save_folder to resource path to determine path for saving the resource
+    save_path = "%s/%s" % (save_folder, resource_path)
 
     # only download if file is not already existing (has been downloaded before)
     if not os.path.isfile(save_path):
         response = download_resource(origin_url, url)
         if response:
             logger.info("Saving external resource with URL '%s' to '%s", url, save_path)
-            with open(save_folder + '/' + save_path, 'w') as f:
+            with open(save_path, 'w') as f:
                 f.write(response)
         else:
             return url
@@ -107,9 +111,9 @@ def save_resource(origin_url, url, save_folder):
 
     # encapsulate the path to the web resource in the webfile tag,
     # so the link works directly in Hippo
-    # save_path = WEBFILES_START_TAG + save_path + WEBFILES_END_TAG
+    # resource_path = WEBFILES_START_TAG + resource_path + WEBFILES_END_TAG
 
-    return save_path
+    return resource_path
 
 
 # search CSS stylesheet (string) for web resources and download them
@@ -177,20 +181,14 @@ def select_folder(ext):
     }.get(ext, 'other')
 
 
-def main(url, output_folder, folders_to_create):
+def main(url, output_folder):
     try:
-        # if page has already been downloaded before, use local copy
-        file_name = output_folder + "/" + TEMPLATE_FILE_NAME
-        if not os.path.isfile(file_name):
-            # parse HTML from URL
-            root = html.fromstring(download_resource(url, ""))
-        else:
-            # parse HTML from local file
-            root = html.parse(file_name)
+        # download resource from URL and parse HTML
+        root = html.fromstring(download_resource(url, ""))
 
         if root is not None:
             # prepare folders
-            create_folders(output_folder, folders_to_create)
+            create_folders(output_folder, FOLDERS_TO_CREATE)
 
             # list containing relative paths to CSS files, for retrieving web resources within these files later on
             css_files = []
@@ -199,9 +197,9 @@ def main(url, output_folder, folders_to_create):
             for elm in root.xpath("//link[@rel!='stylesheet' and @type!='text/css' and @href]"):
                 if elm.get('href'):
                     # save resource
-                    save_path = save_resource(url, elm.get('href'), output_folder)
+                    resource_path = save_resource(url, elm.get('href'), output_folder)
                     # set new path to web resource
-                    elm.set('href', save_path)
+                    elm.set('href', resource_path)
 
             # find all external stylesheets
             # xpath expression returns directly the value of href
@@ -209,36 +207,30 @@ def main(url, output_folder, folders_to_create):
                 if elm.get('href'):
                     href = elm.get('href')
                     # save resource
-                    save_path = save_resource(url, href, output_folder)
-                    # store relative path to CSS files, for retrieving web resources within these files later on
-                    # if '//' in href:
-                    #     download_path = href
-                    # else:
-                    #     download_path = get_download_path(href, base_url, full_url)
-                    # store relative path and file path of saved file as tuple in list
-                    # which will be iterated over later
-                    # css_files.append((save_path, download_path))
-                    css_files.append((save_path, href))
+                    resource_path = save_resource(url, href, output_folder)
+                    # store path to css file and url as tuple in list
+                    # which will be iterated over later for getting resources within the css files
+                    css_files.append((resource_path, href))
                     # set new path to web resource
-                    elm.set('href', save_path)
+                    elm.set('href', resource_path)
 
             # find all web resources from elements with src attribute (<script> and <img> elements)
             # xpath expression returns directly the value of src
             for elm in root.xpath('//*[@src]'):
                 if elm.get('src'):
                     # save resource
-                    save_path = save_resource(url, elm.get('src'), output_folder)
+                    resource_path = save_resource(url, elm.get('src'), output_folder)
                     # set new path to web resource
-                    elm.set('src', save_path)
+                    elm.set('src', resource_path)
 
             # find all web resources from elements with data-src attribute (HTML5)
             # xpath expression returns directly the value of data-src
             for elm in root.xpath('//*[@data-src]'):
                 if elm.get('data-src'):
                     # save resource
-                    save_path = save_resource(url, elm.get('data-src'), output_folder)
+                    resource_path = save_resource(url, elm.get('data-src'), output_folder)
                     # set new path to web resource
-                    elm.set('data-src', save_path)
+                    elm.set('data-src', resource_path)
 
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
@@ -256,14 +248,17 @@ def main(url, output_folder, folders_to_create):
             # find web resources in external stylesheets
             for css_file in css_files:
                 (css_file_path, css_url) = css_file
+                # need to append output_folder to css file path
+                css_file_path = "%s/%s" % (output_folder, css_file_path)
                 if os.path.isfile(css_file_path):
                     with open(css_file_path, 'r') as f:
-                        file_contents = f.read()
-                        new_css = save_resources_from_css(url, file_contents, output_folder)
+                        css_file_contents = f.read()
+                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, output_folder)
                     with open(css_file_path, 'w') as f:
-                        f.write(new_css)
+                        f.write(new_css_file_content)
 
             # save page
+            file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME)
             with open(file_name, 'w') as f:
                 f.write(html.tostring(root))
 
@@ -279,4 +274,4 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--videos', action='store_true', help='download videos')
 
     args = parser.parse_args()
-    main(args.url, args.output, FOLDERS_TO_CREATE)
+    main(args.url, args.output)
