@@ -6,20 +6,32 @@ import re
 import urllib2
 import urlparse
 
-
 FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
 HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) "
                   "Chrome/60.0.3112.90 Safari/537.36"
 }
-TEMPLATE_FILE_NAME = "base-layout.html"
-WEBFILES_START_TAG = "<@hst.webfile  path=\""
+TEMPLATE_FILE_NAME_HTML = "index.html"
+TEMPLATE_FILE_NAME_FTL = "base-layout.ftl"
+FTL_IMPORT_TAG = "<#include \"../include/imports.ftl\">\n"
+WEBFILES_START_TAG_SEARCHREPLACE = "===webfiles_start_tag==="
+WEBFILES_END_TAG_SEARCHREPLACE = "===webfiles_end_tag==="
+WEBFILES_START_TAG = "<@hst.webfile path=\""
 WEBFILES_END_TAG = "\"/>"
 
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+# encapsulate the path to the web resource in the webfile tag so the link works directly in Hippo
+# however, lxml will escape the <@hst.webfile tag, so put placeholders that will be searched & replaced later
+# has to be in a separate method, otherwise path to css files will be incorrect for extraction of css web resources
+def add_webfiles_tags_to_resource_path(resource_path):
+    if not args.html:
+        resource_path = WEBFILES_START_TAG_SEARCHREPLACE + resource_path + WEBFILES_END_TAG_SEARCHREPLACE
+    return resource_path
 
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
@@ -79,15 +91,11 @@ def save_resource(origin_url, url, save_folder):
     else:
         logger.warn("File already exists: %s", save_path)
 
-    # encapsulate the path to the web resource in the webfile tag,
-    # so the link works directly in Hippo
-    # resource_path = WEBFILES_START_TAG + resource_path + WEBFILES_END_TAG
-
     return resource_path
 
 
 # search CSS stylesheet (string) for web resources and download them
-def save_resources_from_css(origin_url, stylesheet_string, save_folder, rel_path):
+def save_resources_from_css(origin_url, stylesheet_string, save_folder, external):
     # check if a style element does not contain text so no exception is raised
     if stylesheet_string:
         # use regexp to search for url(...)
@@ -105,15 +113,18 @@ def save_resources_from_css(origin_url, stylesheet_string, save_folder, rel_path
             # check if URL is not null and does not contain binary data
             if sanitized_url and not sanitized_url.startswith('data:'):
                 # save resource
-                save_path = save_resource(origin_url, sanitized_url, save_folder)
-                # modify path, as the web resources are requested from the /css folder
-                # only do this for external stylesheets, not for internal or inline styles
-                if rel_path:
-                    save_path = "../%s" % save_path
+                resource_path = save_resource(origin_url, sanitized_url, save_folder)
+                # if external stylesheet, resources referenced (e.g. fonts) will be one folder up
+                # so correct the path
+                if external:
+                    resource_path = "../%s" % resource_path
+                # for internal/inline css, add the webfiles tags
+                else:
+                    resource_path = add_webfiles_tags_to_resource_path(resource_path)
                 # replace url with new path
-                stylesheet_string = stylesheet_string[:url.start(1)] + save_path + stylesheet_string[url.end(1):]
+                stylesheet_string = stylesheet_string[:url.start(1)] + resource_path + stylesheet_string[url.end(1):]
                 # update position for next search
-                pos = url.start(1) + len(save_path) + 1
+                pos = url.start(1) + len(resource_path) + 1
             else:
                 # update position for next search
                 pos = url.end(0)
@@ -169,6 +180,7 @@ def main(url, output_folder):
                     # save resource
                     resource_path = save_resource(url, elm.get('href'), output_folder)
                     # set new path to web resource
+                    resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('href', resource_path)
 
             # find all external stylesheets
@@ -182,6 +194,7 @@ def main(url, output_folder):
                     # which will be iterated over later for getting resources within the css files
                     css_files.append((resource_path, href))
                     # set new path to web resource
+                    resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('href', resource_path)
 
             # find all web resources from elements with src attribute (<script> and <img> elements)
@@ -191,6 +204,7 @@ def main(url, output_folder):
                     # save resource
                     resource_path = save_resource(url, elm.get('src'), output_folder)
                     # set new path to web resource
+                    resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('src', resource_path)
 
             # find all web resources from elements with data-src attribute (HTML5)
@@ -200,6 +214,7 @@ def main(url, output_folder):
                     # save resource
                     resource_path = save_resource(url, elm.get('data-src'), output_folder)
                     # set new path to web resource
+                    resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('data-src', resource_path)
 
             # find web resources in inline stylesheets
@@ -226,11 +241,25 @@ def main(url, output_folder):
                         new_css_file_content = save_resources_from_css(css_url, css_file_contents, output_folder, True)
                     with open(css_file_path, 'w') as f:
                         f.write(new_css_file_content)
+                else:
+                    logger.error("Cannot find CSS file for extracting web resources: %s", css_file_path)
 
-            # save page
-            file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME)
+            # save ftl/html
+            html_file_contents = html.tostring(root)
+            if not args.html:
+                file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME_FTL)
+                # add webfiles import tag for importing tag libraries
+                html_file_contents = FTL_IMPORT_TAG + html_file_contents
+            else:
+                file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME_HTML)
+
+            # replace placeholders for webfiles tags
+            html_file_contents = html_file_contents.replace(WEBFILES_START_TAG_SEARCHREPLACE, WEBFILES_START_TAG)
+            html_file_contents = html_file_contents.replace(WEBFILES_END_TAG_SEARCHREPLACE, WEBFILES_END_TAG)
+
+            # save to file
             with open(file_name, 'w') as f:
-                f.write(html.tostring(root))
+                f.write(html_file_contents)
 
     except IOError as e:
         logger.error("Could not fetch HTML for URL: %s", e)
@@ -241,6 +270,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description=description)
     parser.add_argument('url', help="URL to extract web resources for", metavar='URL')
     parser.add_argument('output', help="download resources to folder", metavar='FOLDERNAME')
+    parser.add_argument('-w', '--html', action='store_true', help='save as HTML instead of Freemarker')
     parser.add_argument('-v', '--videos', action='store_true', help='download videos')
 
     args = parser.parse_args()
