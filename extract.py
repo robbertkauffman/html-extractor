@@ -22,7 +22,6 @@ WEBFILES_END_TAG = "\"/>"
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 # encapsulate the path to the web resource in the webfile tag so the link works directly in Hippo
@@ -35,9 +34,9 @@ def add_webfiles_tags_to_resource_path(resource_path):
 
 
 # create folders for storing all web resources, categorized by type (CSS, fonts, etc.)
-def create_folders(save_folder, folder_list):
+def create_folders(output_folder, folder_list):
     for folder in folder_list:
-        folder_path = "%s/%s" % (save_folder, folder)
+        folder_path = "%s/%s" % (output_folder, folder)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -80,7 +79,8 @@ def save_resource(origin_url, url, save_folder):
     save_path = "%s/%s" % (save_folder, resource_path)
 
     # only download if file is not already existing (has been downloaded before)
-    if not os.path.isfile(save_path):
+    # always download css files, because cannot resolve URLs in existing parsed css files
+    if not os.path.isfile(save_path) or ext == "css":
         response = download_resource(origin_url, url)
         if response:
             logger.info("Saving external resource with URL '%s' to '%s", url, save_path)
@@ -162,14 +162,14 @@ def select_folder(ext):
     }.get(ext, 'other')
 
 
-def main(url, output_folder):
+def main(url, save_folder):
     try:
         # download resource from URL and parse HTML
         root = html.fromstring(download_resource(url, ""))
 
         if root is not None:
             # prepare folders
-            create_folders(output_folder, FOLDERS_TO_CREATE)
+            create_folders(save_folder, FOLDERS_TO_CREATE)
 
             # list containing relative paths to CSS files, for retrieving web resources within these files later on
             css_files = []
@@ -178,7 +178,7 @@ def main(url, output_folder):
             for elm in root.xpath("//link[@rel!='stylesheet' and @type!='text/css' and @href]"):
                 if elm.get('href'):
                     # save resource
-                    resource_path = save_resource(url, elm.get('href'), output_folder)
+                    resource_path = save_resource(url, elm.get('href'), save_folder)
                     # set new path to web resource
                     resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('href', resource_path)
@@ -189,7 +189,7 @@ def main(url, output_folder):
                 if elm.get('href'):
                     href = elm.get('href')
                     # save resource
-                    resource_path = save_resource(url, href, output_folder)
+                    resource_path = save_resource(url, href, save_folder)
                     # store path to css file and url as tuple in list
                     # which will be iterated over later for getting resources within the css files
                     css_files.append((resource_path, href))
@@ -202,7 +202,7 @@ def main(url, output_folder):
             for elm in root.xpath('//*[@src]'):
                 if elm.get('src'):
                     # save resource
-                    resource_path = save_resource(url, elm.get('src'), output_folder)
+                    resource_path = save_resource(url, elm.get('src'), save_folder)
                     # set new path to web resource
                     resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('src', resource_path)
@@ -212,33 +212,33 @@ def main(url, output_folder):
             for elm in root.xpath('//*[@data-src]'):
                 if elm.get('data-src'):
                     # save resource
-                    resource_path = save_resource(url, elm.get('data-src'), output_folder)
+                    resource_path = save_resource(url, elm.get('data-src'), save_folder)
                     # set new path to web resource
                     resource_path = add_webfiles_tags_to_resource_path(resource_path)
                     elm.set('data-src', resource_path)
 
             # find web resources in inline stylesheets
             for elm in root.xpath('//style'):
-                new_css = save_resources_from_css(url, elm.text, output_folder, False)
+                new_css = save_resources_from_css(url, elm.text, save_folder, False)
                 # set new text for element, with updated URLs
                 elm.text = new_css
 
             # find web resources in inline styles
             # xpath expression returns directly the value of style
             for elm in root.xpath('//*[@style]'):
-                new_css = save_resources_from_css(url, elm.get('style'), output_folder, False)
+                new_css = save_resources_from_css(url, elm.get('style'), save_folder, False)
                 # set style with new path
                 elm.set('style', new_css)
 
             # find web resources in external stylesheets
             for css_file in css_files:
                 (css_file_path, css_url) = css_file
-                # need to append output_folder to css file path
-                css_file_path = "%s/%s" % (output_folder, css_file_path)
+                # need to append save_folder to css file path
+                css_file_path = "%s/%s" % (save_folder, css_file_path)
                 if os.path.isfile(css_file_path):
                     with open(css_file_path, 'r') as f:
                         css_file_contents = f.read()
-                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, output_folder, True)
+                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, save_folder, True)
                     with open(css_file_path, 'w') as f:
                         f.write(new_css_file_content)
                 else:
@@ -247,11 +247,11 @@ def main(url, output_folder):
             # save ftl/html
             html_file_contents = html.tostring(root)
             if not args.html:
-                file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME_FTL)
+                file_name = "%s/%s" % (save_folder, TEMPLATE_FILE_NAME_FTL)
                 # add webfiles import tag for importing tag libraries
                 html_file_contents = FTL_IMPORT_TAG + html_file_contents
             else:
-                file_name = "%s/%s" % (output_folder, TEMPLATE_FILE_NAME_HTML)
+                file_name = "%s/%s" % (save_folder, TEMPLATE_FILE_NAME_HTML)
 
             # replace placeholders for webfiles tags
             html_file_contents = html_file_contents.replace(WEBFILES_START_TAG_SEARCHREPLACE, WEBFILES_START_TAG)
