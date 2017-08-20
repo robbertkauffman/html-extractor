@@ -1,5 +1,7 @@
 from lxml import html
 from argparse import ArgumentParser
+import base64
+import hashlib
 import logging
 import os
 import re
@@ -42,10 +44,7 @@ def create_folders(output_folder, folder_list):
 
 
 # download resource for URL, raise error if 404 or other error is returned
-def download_resource(origin_url, url):
-    # get fully qualified URL, regardless if URL is a full URL, relative or absolute
-    url = urlparse.urljoin(origin_url, url)
-
+def download_resource(url):
     # download resource
     try:
         request = urllib2.Request(url, headers=HEADER)
@@ -63,9 +62,16 @@ def download_resource(origin_url, url):
 
 # download web resource, determine full URL and save location
 def save_resource(origin_url, url, save_folder):
+    # get fully qualified URL, regardless if URL is a full URL, relative or absolute
+    full_url = urlparse.urljoin(origin_url, url)
+
     # get filename and extension of resource
-    file_name = urlparse.urlsplit(url).path.replace('/', '-').lstrip('-')
+    file_name = urlparse.urlsplit(url).path.split('/')[-1]
     ext = file_name.split('.')[-1].lower()
+    # add unique hash as suffix to filename in case there are web resources with duplicate names
+    # since these are stored all in the same folder (no subfolders used), this prevents overwriting
+    hasher = hashlib.sha1(full_url)
+    file_name = "%s-%s.%s" % (file_name, base64.urlsafe_b64encode(hasher.digest()[0:5]).strip('='), ext)
 
     # determine which folder the resource should be saved to (image, font, etc.)
     folder = select_folder(ext)
@@ -81,9 +87,9 @@ def save_resource(origin_url, url, save_folder):
     # only download if file is not already existing (has been downloaded before)
     # always download css files, because cannot resolve URLs in existing parsed css files
     if not os.path.isfile(save_path) or ext == "css":
-        response = download_resource(origin_url, url)
+        response = download_resource(full_url)
         if response:
-            logger.info("Saving external resource with URL '%s' to '%s", url, save_path)
+            logger.info("Saving external resource with URL '%s' to '%s", full_url, save_path)
             with open(save_path, 'w') as f:
                 f.write(response)
         else:
@@ -165,7 +171,7 @@ def select_folder(ext):
 def main(url, save_folder):
     try:
         # download resource from URL and parse HTML
-        root = html.fromstring(download_resource(url, ""))
+        root = html.fromstring(download_resource(url))
 
         if root is not None:
             # prepare folders
