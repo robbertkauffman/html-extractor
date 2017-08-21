@@ -5,6 +5,7 @@ import hashlib
 import logging
 import os
 import re
+import sys
 import urllib2
 import urlparse
 
@@ -170,8 +171,17 @@ def select_folder(ext):
 
 def main(url, save_folder):
     try:
-        # download resource from URL and parse HTML
-        root = html.fromstring(download_resource(url))
+        if not args.supplied_html:
+            # download resource from URL and parse HTML
+            root = html.fromstring(download_resource(url))
+        else:
+            if os.path.isfile(args.supplied_html):
+                with open(args.supplied_html, 'r') as f:
+                    supplied_html_file_contents = f.read()
+                    root = html.fromstring(supplied_html_file_contents)
+            else:
+                logger.error("Could not supplied HTML file: %s", args.supplied_html)
+                sys.exit()
 
         if root is not None:
             # prepare folders
@@ -244,7 +254,9 @@ def main(url, save_folder):
                 if os.path.isfile(css_file_path):
                     with open(css_file_path, 'r') as f:
                         css_file_contents = f.read()
-                        new_css_file_content = save_resources_from_css(css_url, css_file_contents, save_folder, True)
+                        # get fully qualified URL to css file, regardless if URL is a full URL, relative or absolute
+                        css_full_url = urlparse.urljoin(url, css_url)
+                        new_css_file_content = save_resources_from_css(css_full_url, css_file_contents, save_folder, True)
                     with open(css_file_path, 'w') as f:
                         f.write(new_css_file_content)
                 else:
@@ -276,6 +288,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description=description)
     parser.add_argument('url', help="URL to extract web resources for", metavar='URL')
     parser.add_argument('output', help="download resources to folder", metavar='FOLDERNAME')
+    parser.add_argument('--file', dest="supplied_html", help='use supplied HTML file instead of downloading from URL')
     parser.add_argument('-w', '--html', action='store_true', help='save as HTML instead of Freemarker')
     parser.add_argument('-v', '--videos', action='store_true', help='download videos')
 
