@@ -30,8 +30,8 @@ folder (on Mac/Linux):
 * v11: `cp -R OUTPUT_FOLDER PATH_TO_PROJECT/bootstrap/webfiles/src/main/resources/site`
 
 Finally, copy and overwrite the base-layout.ftl file in your project:
-* v12: `cp OUTPUT_FOLDER/base-layout.ftl PATH_TO_PROJECT/repository-data/webfiles/src/main/resources/site/freemarker/PROJECTNAME (e.g. basedemo)`
-* v11: `cp OUTPUT_FOLDER/base-layout.ftl PATH_TO_PROJECT/bootstrap/webfiles/src/main/resources/site/freemarker/PROJECTNAME (e.g. basedemo)`
+* v12: `cp OUTPUT_FOLDER/base-layout.ftl PATH_TO_PROJECT/repository-data/webfiles/src/main/resources/site/freemarker/PROJECTNAME (e.g. myhippoproject)`
+* v11: `cp OUTPUT_FOLDER/base-layout.ftl PATH_TO_PROJECT/bootstrap/webfiles/src/main/resources/site/freemarker/PROJECTNAME (e.g. myhippoproject)`
 
 The site should now look very similar if not exactly like the site that you have extracted.
 For demos, you will still need to break down the template in sub templates (header, main, 
