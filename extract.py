@@ -75,7 +75,7 @@ def save_resource(origin_url, url, save_folder):
     file_name = "%s-%s.%s" % (file_name, base64.urlsafe_b64encode(hasher.digest()[0:5]).strip('='), ext)
 
     # determine which folder the resource should be saved to (image, font, etc.)
-    folder = select_folder(ext)
+    folder = select_folder(ext)[0]
     resource_path = "%s/%s" % (folder, file_name)
 
     # do not download videos unless flag has been set
@@ -91,7 +91,9 @@ def save_resource(origin_url, url, save_folder):
         response = download_resource(full_url)
         if response:
             logger.info("Saving external resource with URL '%s' to '%s", full_url, save_path)
-            with open(save_path, 'w') as f:
+            # download as binary for images, icons and non-SVG fonts
+            write_mode = select_folder(ext)[1]
+            with open(save_path, write_mode) as f:
                 f.write(response)
         else:
             return url
@@ -143,30 +145,31 @@ def save_resources_from_css(origin_url, stylesheet_string, save_folder, external
 
 
 # switch-case statement used by create_folders()
+# returns tuples of folder and write-mode (binary, non-binary)
 def select_folder(ext):
     return {
-        'css': 'css',
-        'js': 'js',
+        'css': ('css', 'w'),
+        'js': ('js', 'w'),
         # images
-        'gif': 'images',
-        'jpeg': 'images',
-        'jpg': 'images',
-        'png': 'images',
+        'gif': ('images', 'wb'),
+        'jpeg': ('images', 'wb'),
+        'jpg': ('images', 'wb'),
+        'png': ('images', 'wb'),
         # icons
-        'ico': 'icons',
+        'ico': ('icons', 'wb'),
         # fonts
-        'eot': 'fonts',
-        'svg': 'fonts',
-        'ttf': 'fonts',
-        'woff': 'fonts',
-        'woff2': 'fonts',
-        'other': 'other',
+        'eot': ('fonts', 'wb'),
+        'svg': ('fonts', 'w'),
+        'ttf': ('fonts', 'wb'),
+        'woff': ('fonts', 'wb'),
+        'woff2': ('fonts', 'wb'),
+        'other': ('other', 'w'),
         # videos
-        'mp4': 'videos',
-        'ogv': 'videos',
-        'webm': 'videos',
-        'mov': 'videos'
-    }.get(ext, 'other')
+        'mp4': ('videos', 'wb'),
+        'ogv': ('videos', 'wb'),
+        'webm': ('videos', 'wb'),
+        'mov': ('videos', 'wb'),
+    }.get(ext, ('other', 'w'))
 
 
 def main(url, save_folder):
