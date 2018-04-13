@@ -219,7 +219,7 @@ def main(url, save_folder):
             # find all web resources from elements with src attribute (<script> and <img> elements)
             # xpath expression returns directly the value of src
             for elm in root.xpath('//*[@src]'):
-                if elm.get('src'):
+                if elm.get('src') and not elm.get('src').startswith('data:'):
                     # save resource
                     resource_path = save_resource(url, elm.get('src'), save_folder)
                     # set new path to web resource
