@@ -49,7 +49,7 @@ def download_resource(url):
     # download resource
     try:
         request = urllib2.Request(url, headers=HEADER)
-        response = urllib2.urlopen(request)
+        response = urllib2.urlopen(request, timeout=3)
 
         return response.read()
     except urllib2.HTTPError, e:
