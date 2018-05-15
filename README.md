@@ -11,10 +11,12 @@ resource folders to Experience, and you should be good to go.
 ## Requirements
 To run the script you need Python 2.7.9 or higher. [Download Python 2.7.x here](https://www.python.org/downloads/release/python-2713/)
 
-You also need the [lxml library](http://lxml.de/installation.html). You can install this 
+You also need the [lxml library](http://lxml.de/installation.html) and the 
+[requests library](http://docs.python-requests.org/en/master/user/install/#install). You can install these 
 via the command line when you have Python >= 2.79 installed:
 ```bash
     $ pip install lxml
+    $ pip install requests
 ```
 
 ## Usage

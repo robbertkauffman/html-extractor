@@ -5,14 +5,14 @@ import hashlib
 import logging
 import os
 import re
+import requests
 import sys
-import urllib2
 import urlparse
 
 FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
 HEADER = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/60.0.3112.90 Safari/537.36"
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/65.0.3325.181 Safari/537.36"
 }
 TEMPLATE_FILE_NAME_HTML = "index.html"
 TEMPLATE_FILE_NAME_FTL = "base-layout.ftl"
@@ -48,17 +48,18 @@ def create_folders(output_folder, folder_list):
 def download_resource(url):
     # download resource
     try:
-        request = urllib2.Request(url, headers=HEADER)
-        response = urllib2.urlopen(request, timeout=3)
+        r = requests.get(url, headers=HEADER, timeout=3)
+        r.raise_for_status()
 
-        return response.read()
-    except urllib2.HTTPError, e:
-        if e.code == 404:
-            logger.error("Error 404, resource not found: %s", url)
-        else:
-            logger.error("Error with status code %s for URL: %s", e.code, url)
-    except urllib2.URLError, e:
-            logger.error("Error %s for URL: %s", e.reason, url)
+        if r.encoding:
+            return r.text.encode(r.encoding)
+        return r.text.encode('utf-8')
+    except requests.exceptions.HTTPError as e:
+        logger.error("HTTP Error for URL: %s, %s", url, e)
+    except requests.exceptions.Timeout:
+        logger.error("Error, request timed out for URL: %s", url)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error '%s' for URL: %s", e, url)
 
 
 # download web resource, determine full URL and save location
