@@ -55,7 +55,7 @@ def download_resource(url):
             return r.text.encode(r.encoding)
         return r.text.encode('utf-8')
     except requests.exceptions.HTTPError as e:
-        logger.error("HTTP Error for URL: %s, %s", url, e)
+        logger.warn("HTTP Error for URL: %s, %s", url, e)
     except requests.exceptions.Timeout:
         logger.error("Error, request timed out for URL: %s", url)
     except requests.exceptions.RequestException as e:
@@ -94,6 +94,7 @@ def save_resource(origin_url, url, save_folder):
             logger.info("Saving external resource with URL '%s' to '%s", full_url, save_path)
             # download as binary for images, icons and non-SVG fonts
             write_mode = select_folder(ext)[1]
+            logger.debug("Saving external resource as %s with URL '%s' to '%s", write_mode, full_url, save_path)
             with open(save_path, write_mode) as f:
                 f.write(response)
         else:
@@ -175,6 +176,7 @@ def select_folder(ext):
 
 def main(url, save_folder):
     try:
+        print("Extracting resources from {} to folder '{}'...".format(url, save_folder))
         if not args.supplied_html:
             # download resource from URL and parse HTML
             root = html.fromstring(download_resource(url))
@@ -282,6 +284,7 @@ def main(url, save_folder):
             # save to file
             with open(file_name, 'w') as f:
                 f.write(html_file_contents)
+            print("Downloaded resources from {} successfully to folder '{}'".format(url, save_folder))
 
     except IOError as e:
         logger.error("Could not fetch HTML for URL: %s", e)
@@ -293,8 +296,18 @@ if __name__ == '__main__':
     parser.add_argument('url', help="URL to extract web resources for", metavar='URL')
     parser.add_argument('output', help="download resources to folder", metavar='FOLDERNAME')
     parser.add_argument('--file', dest="supplied_html", help='use supplied HTML file instead of downloading from URL')
+    parser.add_argument('--loglevel', dest="loglevel", help='change default logging level')
     parser.add_argument('-w', '--html', action='store_true', help='save as HTML instead of Freemarker')
     parser.add_argument('-v', '--videos', action='store_true', help='download videos')
 
     args = parser.parse_args()
+
+    # set loglevel via commandline
+    if args.loglevel == "debug":
+        logging.getLogger().setLevel(logging.DEBUG)
+    elif args.loglevel == "info":
+        logging.getLogger().setLevel(logging.INFO)
+    else:
+        logger.warn("Warning: log level not recognized")
+
     main(args.url, args.output)
