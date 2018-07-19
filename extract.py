@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import requests
+import shutil
 import sys
 import urlparse
 
@@ -45,21 +46,49 @@ def create_folders(output_folder, folder_list):
 
 
 # download resource for URL, raise error if 404 or other error is returned
-def download_resource(url):
+def download_resource(url, ext, save_path=None):
     # download resource
     try:
-        r = requests.get(url, headers=HEADER, timeout=3)
-        r.raise_for_status()
+        # download as binary for images, icons and non-SVG fonts
+        write_mode = select_folder(ext)[1]
+        stream = False
+        if write_mode == 'wb':
+            stream = True
 
-        if r.encoding:
-            return r.text.encode(r.encoding)
-        return r.text.encode('utf-8')
+        logger.info("Downloading external resource with URL '%s'", url)
+        response = requests.get(url, headers=HEADER, timeout=3, stream=stream)
+        response.raise_for_status()
+
+        # only use encoding for non-binary files
+        if write_mode == 'w':
+            if response.encoding:
+                response = response.text.encode(response.encoding)
+            else:
+                response = response.text.encode('utf-8')
+
+        # write resource if save_path is provided
+        if save_path:
+            logger.debug("Writing external resource as %s from URL '%s' to '%s'", write_mode, url, save_path)
+            write_resource(response, write_mode, save_path)
+
+        return response
     except requests.exceptions.HTTPError as e:
         logger.warn("HTTP Error for URL: %s, %s", url, e)
     except requests.exceptions.Timeout:
         logger.error("Error, request timed out for URL: %s", url)
     except requests.exceptions.RequestException as e:
         logger.error("Error '%s' for URL: %s", e, url)
+
+
+# write resource to disk
+def write_resource(response, write_mode, save_path):
+    with open(save_path, write_mode) as f:
+        # non-binaries
+        if write_mode == "w":
+            f.write(response)
+        # binaries
+        else:
+            shutil.copyfileobj(response.raw, f)
 
 
 # download web resource, determine full URL and save location
@@ -89,18 +118,11 @@ def save_resource(origin_url, url, save_folder):
     # only download if file is not already existing (has been downloaded before)
     # always download css files, because cannot resolve URLs in existing parsed css files
     if not os.path.isfile(save_path) or ext == "css":
-        response = download_resource(full_url)
-        if response:
-            logger.info("Saving external resource with URL '%s' to '%s", full_url, save_path)
-            # download as binary for images, icons and non-SVG fonts
-            write_mode = select_folder(ext)[1]
-            logger.debug("Saving external resource as %s with URL '%s' to '%s", write_mode, full_url, save_path)
-            with open(save_path, write_mode) as f:
-                f.write(response)
-        else:
+        response = download_resource(full_url, ext, save_path)
+        if not response:
             return url
     else:
-        logger.warn("File already exists: %s", save_path)
+        logger.info("File already exists: %s", save_path)
 
     return resource_path
 
@@ -171,6 +193,9 @@ def select_folder(ext):
         'ogv': ('videos', 'wb'),
         'webm': ('videos', 'wb'),
         'mov': ('videos', 'wb'),
+        # HTML fragments
+        'htm': ('other', 'w'),
+        'html': ('other', 'w'),
     }.get(ext, ('other', 'w'))
 
 
@@ -179,7 +204,7 @@ def main(url, save_folder):
         print("Extracting resources from {} to folder '{}'...".format(url, save_folder))
         if not args.supplied_html:
             # download resource from URL and parse HTML
-            root = html.fromstring(download_resource(url))
+            root = html.fromstring(download_resource(url, '.html'))
         else:
             if os.path.isfile(args.supplied_html):
                 with open(args.supplied_html, 'r') as f:
