@@ -307,7 +307,7 @@ if __name__ == '__main__':
         logging.getLogger().setLevel(logging.DEBUG)
     elif args.loglevel == "info":
         logging.getLogger().setLevel(logging.INFO)
-    else:
+    elif args.loglevel is not None:
         logger.warn("Warning: log level not recognized")
 
     main(args.url, args.output)
