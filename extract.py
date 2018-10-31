@@ -184,10 +184,10 @@ def select_folder(ext):
         # fonts
         'eot': ('fonts', 'wb'),
         'svg': ('fonts', 'w'),
+        'otf': ('fonts', 'wb'),
         'ttf': ('fonts', 'wb'),
         'woff': ('fonts', 'wb'),
         'woff2': ('fonts', 'wb'),
-        'other': ('other', 'w'),
         # videos
         'mp4': ('videos', 'wb'),
         'ogv': ('videos', 'wb'),
