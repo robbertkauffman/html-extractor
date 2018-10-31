@@ -188,7 +188,6 @@ def select_folder(ext):
         'ttf': ('fonts', 'wb'),
         'woff': ('fonts', 'wb'),
         'woff2': ('fonts', 'wb'),
-        'other': ('other', 'w'),
         # videos
         'mp4': ('videos', 'wb'),
         'ogv': ('videos', 'wb'),
