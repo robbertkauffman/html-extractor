@@ -10,7 +10,7 @@ import shutil
 import sys
 import urlparse
 
-FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
+FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'videos', 'other']
 HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/65.0.3325.181 Safari/537.36"
