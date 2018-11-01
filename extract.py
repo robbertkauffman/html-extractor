@@ -23,6 +23,33 @@ WEBFILES_END_TAG_SEARCHREPLACE = "===webfiles_end_tag==="
 WEBFILES_START_TAG = "<@hst.webfile path=\""
 WEBFILES_END_TAG = "\"/>"
 
+HST_WHITELIST_FILE_NAME = "hst-whitelist.txt"
+HST_WHITELIST_PREAMBLE = """\
+##########################################################################
+#                                                                        #
+#   This file must contain all files and folders that                    #
+#   most be publicly available over http. Typically folders              #
+#   that contain server side scripts, such a freemarker                  #
+#   templates, should not be added as they in general should             #
+#   not be publicly available.                                           #
+#                                                                        #
+#   The whitelisting is *relative* to the 'web file bundle root'         #
+#   which is the folder in which this hst-whitelist.txt file is          #
+#   located.                                                             #
+#                                                                        #
+#   Examples assuming the web file bundle root is 'site':                #
+#                                                                        #
+#   css/       : whitelists all descendant web files below 'site/css/'   #
+#   common.js  : whitelists the file 'site/common.js'                    #
+#                                                                        #
+#   Note that the whitelisting is 'starts-with' based, thus for          #
+#   example whitelisting 'css' without '/' behind it, whitelists all     #
+#   files and folders that start with 'css'                              #
+#                                                                        #
+##########################################################################
+
+"""
+
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
@@ -43,6 +70,15 @@ def create_folders(output_folder, folder_list):
         folder_path = "%s/%s" % (output_folder, folder)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
+
+
+# create hst-whitelist with all the folders being created
+def create_whitelist(output_folder, folder_list):
+    file_contents = HST_WHITELIST_PREAMBLE + "/\n".join(folder_list + [""])
+
+    file_name = "%s/%s" % (output_folder, HST_WHITELIST_FILE_NAME)
+    with open(file_name, 'w') as f:
+        f.write(file_contents)
 
 
 # download resource for URL, raise error if 404 or other error is returned
@@ -217,6 +253,9 @@ def main(url, save_folder):
         if root is not None:
             # prepare folders
             create_folders(save_folder, FOLDERS_TO_CREATE)
+
+            # whitelist folders
+            create_whitelist(save_folder, FOLDERS_TO_CREATE)
 
             # list containing relative paths to CSS files, for retrieving web resources within these files later on
             css_files = []
