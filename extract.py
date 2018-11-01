@@ -1,4 +1,5 @@
 from lxml import html
+from math import ceil
 from argparse import ArgumentParser
 import base64
 import hashlib
@@ -26,6 +27,10 @@ WEBFILES_END_TAG = "\"/>"
 # initiate logger
 logging.basicConfig()
 logger = logging.getLogger(__name__)
+
+# track file sizes and types
+fileSizes = []
+fileTypes = []
 
 
 # encapsulate the path to the web resource in the webfile tag so the link works directly in Hippo
@@ -59,6 +64,8 @@ def download_resource(url, ext, save_path=None):
         response = requests.get(url, headers=HEADER, timeout=3, stream=stream)
         response.raise_for_status()
 
+        fileSize = len(response.content)
+
         # only use encoding for non-binary files
         if write_mode == 'w':
             if response.encoding:
@@ -68,6 +75,12 @@ def download_resource(url, ext, save_path=None):
 
         # write resource if save_path is provided
         if save_path:
+            fileSizes.append(fileSize)
+
+            fileType = "*.%s" % ext
+            if fileType not in fileTypes:
+                fileTypes.append(fileType)
+
             logger.debug("Writing external resource as %s from URL '%s' to '%s'", write_mode, url, save_path)
             write_resource(response, write_mode, save_path)
 
@@ -309,7 +322,12 @@ def main(url, save_folder):
             # save to file
             with open(file_name, 'w') as f:
                 f.write(html_file_contents)
-            print("Downloaded resources from {} successfully to folder '{}'".format(url, save_folder))
+            print("Downloaded resources from {} successfully to folder '{}'\n".format(url, save_folder))
+
+            maxFileSize = max(fileSizes)
+            maxFileSizeKB = int(ceil(maxFileSize / 1024.0))
+            print("Maximum file size: {} KB".format(maxFileSizeKB))
+            print("File types: {}".format(fileTypes))
 
     except IOError as e:
         logger.error("Could not fetch HTML for URL: %s", e)
