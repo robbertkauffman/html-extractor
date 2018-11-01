@@ -74,8 +74,7 @@ def create_folders(output_folder, folder_list):
 
 # create hst-whitelist with all the folders being created
 def create_whitelist(output_folder, folder_list):
-    folder_list_suffixed = list(map(lambda folder: "%s/" % folder, folder_list))
-    file_contents = HST_WHITELIST_PREAMBLE + "\n".join(folder_list_suffixed)
+    file_contents = HST_WHITELIST_PREAMBLE + "/\n".join(folder_list + [""])
 
     file_name = "%s/%s" % (output_folder, HST_WHITELIST_FILE_NAME)
     with open(file_name, 'w') as f:
