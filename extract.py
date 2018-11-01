@@ -11,7 +11,6 @@ import sys
 import urlparse
 
 FOLDERS_TO_CREATE = ['css', 'fonts', 'icons', 'images', 'js', 'other']
-HST_WHITELIST_FILE_NAME = "hst-whitelist.txt"
 HEADER = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/65.0.3325.181 Safari/537.36"
@@ -23,6 +22,33 @@ WEBFILES_START_TAG_SEARCHREPLACE = "===webfiles_start_tag==="
 WEBFILES_END_TAG_SEARCHREPLACE = "===webfiles_end_tag==="
 WEBFILES_START_TAG = "<@hst.webfile path=\""
 WEBFILES_END_TAG = "\"/>"
+
+HST_WHITELIST_FILE_NAME = "hst-whitelist.txt"
+HST_WHITELIST_PREAMBLE = """\
+##########################################################################
+#                                                                        #
+#   This file must contain all files and folders that                    #
+#   most be publicly available over http. Typically folders              #
+#   that contain server side scripts, such a freemarker                  #
+#   templates, should not be added as they in general should             #
+#   not be publicly available.                                           #
+#                                                                        #
+#   The whitelisting is *relative* to the 'web file bundle root'         #
+#   which is the folder in which this hst-whitelist.txt file is          #
+#   located.                                                             #
+#                                                                        #
+#   Examples assuming the web file bundle root is 'site':                #
+#                                                                        #
+#   css/       : whitelists all descendant web files below 'site/css/'   #
+#   common.js  : whitelists the file 'site/common.js'                    #
+#                                                                        #
+#   Note that the whitelisting is 'starts-with' based, thus for          #
+#   example whitelisting 'css' without '/' behind it, whitelists all     #
+#   files and folders that start with 'css'                              #
+#                                                                        #
+##########################################################################
+
+"""
 
 # initiate logger
 logging.basicConfig()
@@ -48,33 +74,8 @@ def create_folders(output_folder, folder_list):
 
 # create hst-whitelist with all the folders being created
 def create_whitelist(output_folder, folder_list):
-    file_contents = """
-##########################################################################
-#                                                                        #
-#   This file must contain all files and folders that                    #
-#   most be publicly available over http. Typically folders              #
-#   that contain server side scripts, such a freemarker                  #
-#   templates, should not be added as they in general should             #
-#   not be publicly available.                                           #
-#                                                                        #
-#   The whitelisting is *relative* to the 'web file bundle root'         #
-#   which is the folder in which this hst-whitelist.txt file is          #
-#   located.                                                             #
-#                                                                        #
-#   Examples assuming the web file bundle root is 'site':                #
-#                                                                        #
-#   css/       : whitelists all descendant web files below 'site/css/'   #
-#   common.js  : whitelists the file 'site/common.js'                    #
-#                                                                        #
-#   Note that the whitelisting is 'starts-with' based, thus for          #
-#   example whitelisting 'css' without '/' behind it, whitelists all     #
-#   files and folders that start with 'css'                              #
-#                                                                        #
-##########################################################################
-
-"""
     folder_list_suffixed = list(map(lambda folder: "%s/" % folder, folder_list))
-    file_contents += "\n".join(folder_list_suffixed)
+    file_contents = HST_WHITELIST_PREAMBLE + "\n".join(folder_list_suffixed)
 
     file_name = "%s/%s" % (output_folder, HST_WHITELIST_FILE_NAME)
     with open(file_name, 'w') as f:
